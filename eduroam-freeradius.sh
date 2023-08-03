@@ -45,7 +45,7 @@ apt-get install freeradius
 
 echo 'Network RADIUS SARL <info@networkradius.com>'
 dpkg-query --showformat '${Maintainer}\n' -W freeradius
-read 'Do the two lines above match (y/n)?' yn
+read -p 'Do the two lines above match (y/n)? ' yn
 case $yn in
 	y ) echo 'Proceeding with script...';;
 	n ) echo 'Exiting...';
