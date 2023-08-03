@@ -1,0 +1,211 @@
+diff -ruN freeradius.orig/clients.conf freeradius/clients.conf
+--- freeradius.orig/clients.conf	2022-09-20 14:16:10.000000000 +0000
++++ freeradius/clients.conf	2023-08-03 13:58:46.853728305 +0000
+@@ -286,3 +286,19 @@
+ #		secret = testing123
+ #	}
+ #}
++
++client eduroam_tlrs1 {
++	ipaddr				= tlrs1.eduroam.us
++	secret				= <<SECRET>>
++	require_message_authenticator	= yes
++	shortname			= eduroam_tlrs1
++	nastype				= other
++}
++
++client eduroam_tlrs2 {
++	ipaddr				= tlrs2.eduroam.us
++	secret				= <<SECRET>>
++	require_message_authenticator	= yes
++	shortname			= eduroam_tlrs2
++	nastype				= other
++}
+diff -ruN freeradius.orig/mods-available/eap freeradius/mods-available/eap
+--- freeradius.orig/mods-available/eap	2022-09-20 14:16:10.000000000 +0000
++++ freeradius/mods-available/eap	2023-08-03 14:26:13.100553143 +0000
+@@ -24,7 +24,7 @@
+ 	#  then that EAP type takes precedence over the
+ 	#  default type configured here.
+ 	#
+-	default_eap_type = md5
++	default_eap_type = ttls
+ 
+ 	#  A list is maintained to correlate EAP-Response
+ 	#  packets with EAP-Request packets.  After a
+@@ -77,8 +77,8 @@
+ 	#  for wireless connections.  It is insecure, and does
+ 	#  not provide for dynamic WEP keys.
+ 	#
+-	md5 {
+-	}
++	#md5 {
++	#}
+ 
+ 
+ 	#  EAP-pwd -- secure password-based authentication
+@@ -819,7 +819,7 @@
+ 		#  EAP conversation, then this configuration entry is
+ 		#  ignored.
+ 		#
+-		default_eap_type = md5
++		default_eap_type = mschapv2
+ 
+ 		#  The tunneled authentication request does not usually
+ 		#  contain useful attributes like 'Calling-Station-Id',
+@@ -835,7 +835,7 @@
+ 		#
+ 		#  allowed values: {no, yes}
+ 		#
+-		copy_request_to_tunnel = no
++		copy_request_to_tunnel = yes
+ 
+ 		#  This configuration item is deprecated.  Instead,
+ 		#  you should use:
+@@ -860,7 +860,7 @@
+ 		#
+ 		#  allowed values: {no, yes}
+ 		#
+-		use_tunneled_reply = no
++		use_tunneled_reply = yes
+ 
+ 		#  The inner tunneled request can be sent
+ 		#  through a virtual server constructed
+@@ -930,7 +930,7 @@
+ 	#  EAP module.  Inside of the TLS/PEAP tunnel, we
+ 	#  recommend using EAP-MS-CHAPv2.
+ 	#
+-	peap {
++	#peap {
+ 		#  Which tls-config section the TLS negotiation parameters
+ 		#  are in - see EAP-TLS above for an explanation.
+ 		#
+@@ -940,7 +940,7 @@
+ 		#  above. If that is done, the tls= option here (and in
+ 		#  tls above) MUST be commented out.
+ 		#
+-		tls = tls-common
++	#	tls = tls-common
+ 
+ 		#  The tunneled EAP session needs a default
+ 		#  EAP type which is separate from the one for
+@@ -949,12 +949,12 @@
+ 		#  as that is the default type supported by
+ 		#  Windows clients.
+ 		#
+-		default_eap_type = mschapv2
++	#	default_eap_type = mschapv2
+ 
+ 		#  The PEAP module also has these configuration
+ 		#  items, which are the same as for TTLS.
+ 		#
+-		copy_request_to_tunnel = no
++	#	copy_request_to_tunnel = yes
+ 
+ 		#  This configuration item is deprecated.  Instead,
+ 		#  you should use:
+@@ -969,7 +969,7 @@
+ 		#  sections of sites-available/default, and of
+ 		#  sites-available/inner-tunnel
+ 		#
+-		use_tunneled_reply = no
++	#	use_tunneled_reply = yes
+ 
+ 		#  When the tunneled session is proxied, the
+ 		#  home server may not understand EAP-MSCHAP-V2.
+@@ -989,7 +989,7 @@
+ 		#
+ 		#  A virtual server MUST be specified.
+ 		#
+-		virtual_server = "inner-tunnel"
++	#	virtual_server = "eduroam-inner-tunnel"
+ 
+ 		#  This option enables support for MS-SoH
+ 		#  see doc/SoH.txt for more info.
+@@ -1015,7 +1015,7 @@
+ 		#  be usable for most people.
+ 		#
+ 	#	require_client_cert = yes
+-	}
++	#}
+ 
+ 
+ 	#  EAP-MSCHAPv2
+diff -ruN freeradius.orig/proxy.conf freeradius/proxy.conf
+--- freeradius.orig/proxy.conf	2022-09-20 14:16:10.000000000 +0000
++++ freeradius/proxy.conf	2023-08-03 13:29:52.911046749 +0000
+@@ -858,3 +858,11 @@
+ #realm "~(.*\.)*example\.net$" {
+ #      auth_pool = my_auth_failover
+ #}
++realm contoso.com {
++	oauth2 {
++		discovery = "https://login.microsoftonline.com/%{Realm}/v2.0"
++		client_id = "<<CLIENT_ID>>"
++		client_secret = "<<CLIENT_SECRET>>"
++		cache_password = yes
++	}
++}
+diff -ruN freeradius.orig/sites-available/default freeradius/sites-available/default
+--- freeradius.orig/sites-available/default	2022-09-20 14:16:10.000000000 +0000
++++ freeradius/sites-available/default	2023-08-03 13:27:41.137747225 +0000
+@@ -437,6 +437,8 @@
+ 	#  The ldap module reads passwords from the LDAP database.
+ 	-ldap
+ 
++	oauth2
++
+ 	#
+ 	#  If you're using Active Directory and PAP, then uncomment
+ 	#  the following lines, and the "Auth-Type LDAP" section below.
+@@ -601,6 +603,10 @@
+ #			handled  # override the "updated" code from attr_filter
+ #		}
+ #	}
++
++	Auth-Type oauth2 {
++		oauth2
++	}
+ }
+ 
+ 
+@@ -860,6 +866,8 @@
+ 	#
+ #	ldap
+ 
++	oauth2
++
+ 	# For Exec-Program and Exec-Program-Wait
+ 	exec
+ 
+diff -ruN freeradius.orig/sites-available/inner-tunnel freeradius/sites-available/inner-tunnel
+--- freeradius.orig/sites-available/inner-tunnel	2022-09-20 14:16:10.000000000 +0000
++++ freeradius/sites-available/inner-tunnel	2023-08-03 13:27:41.137747225 +0000
+@@ -153,6 +153,8 @@
+ 	#  The ldap module reads passwords from the LDAP database.
+ 	-ldap
+ 
++	oauth2
++
+ 	#
+ 	#  Enforce daily limits on time spent logged in.
+ #	daily
+@@ -245,6 +247,10 @@
+ 	#
+ 	#  Allow EAP authentication.
+ 	eap
++
++	Auth-Type oauth2 {
++		oauth2
++	}
+ }
+ 
+ ######################################################################
+@@ -313,6 +319,7 @@
+ 	#
+ #	ldap
+ 
++	oauth2
+ 
+ 	#
+ 	#  Un-comment the following if you want to generate Moonshot (ABFAB) TargetedIds
